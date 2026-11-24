@@ -42,6 +42,10 @@ COLOR_CREAM:
 COLOR_DARK_BROWN:
     .word 0x5c4033
 
+# Fixing flickering
+NEEDS_REDRAW:
+    .word 1
+
 ##############################################################################
 # Mutable Data
 ##############################################################################
@@ -80,11 +84,19 @@ game_loop:
 
     jal check_keyboard
     jal check_row_advance
+    
+    # Added this portion to fix flickering
+    lw $t0, NEEDS_REDRAW # 1 if a key was pressed and a refresh is consequently needed
+    beq $t0, $zero, skip_refresh
+    sw $zero, NEEDS_REDRAW
+    # when no key is being pressed
+
     jal draw_background
     jal draw_board
     jal draw_player
     jal draw_held
 
+skip_refresh:
     li $v0, 32
     li $a0, 16
     syscall
@@ -93,7 +105,7 @@ game_loop:
     j game_loop
 
 ##############################################################################
-#1.
+# 1.
 # initialize_board
 # clears all 98 cells, then fills the top 5 rows (35 pixels) with random colours 1 to 4
 ##############################################################################
@@ -121,6 +133,14 @@ random_board_loop:
     syscall
 
     addi $a0, $a0, 1
+    addi $t2, $zero, 21
+    bgt $t1, $t2, store_init_c
+    lw $t3, -28($t0)
+    lw $t4, -56($t0)
+    bne $a0, $t3, store_init_c
+    beq $a0, $t4, random_board_loop # identical logic as new_row_loop
+
+store_init_c:
     sw $a0, 0($t0)
     addi $t0, $t0, 4
     addi $t1, $t1, -1
@@ -141,6 +161,7 @@ check_keyboard:
 
 key_pressed:
     lw $t2, 4($t0)
+    sw $t9, NEEDS_REDRAW
     beq $t2, 0x61, move_left
     beq $t2, 0x64, move_right
     beq $t2, 0x73, grab_bubbles
@@ -257,10 +278,18 @@ check_bottom_row_loop:
 
 new_row_loop:
     li $v0, 42
-    li $a0, 0
+    li $a0, 0 
     li $a1, 4
     syscall
     addi $a0, $a0, 1
+
+    # Hard-feature #4
+    lw $t3, 28($t0) # loading the bubble one row below into $t3
+    lw $t4, 56($t0) # loading the bubble two rows below into $t4
+    bne $a0, $t3, store_new_c 
+    beq $a0, $t4, new_row_loop # match 3 detected; going back to new_row_loop to generate new cell(s)
+
+store_new_c:
     sw $a0, 0($t0)
     addi $t0, $t0, 4
     addi $t1, $t1, -1
@@ -447,7 +476,11 @@ draw_player:
 
 ##############################################################################
 # throw_bubbles (Milestone 3b)
-# throws all the bubbles the player currently has to the bottom of the column
+# throws all the bubbles the player currently has to the bottom of the bubbles
+# in a column
+
+# Temporary Register map:
+# (will be added by the second demo)
 ##############################################################################
 throw_bubbles:
     # (1) Saving return address
@@ -473,7 +506,7 @@ throw_bubbles:
 
     li $t2, 13
 
-# I liked the fact that you labelled loop portions of your code explicitly as game_loop; I will follow the suit
+# I liked the fact that you labelled loop portions of your code explicitly as game_loop; I will follow suit
 find_landing_loop:
     lw $t3, 0($t1)
     bne $t3, $zero, landing_found
@@ -507,18 +540,23 @@ place_bubbles_loop:
 place_done:
     sw $zero, HELD_COUNT
     sw $zero, HELD_COLOR
-    
-    jal check_vertical_match
-    bne $s0, $zero, exit_program # Game over
+
+match_chain_loop:
+    jal check_vertical_match # Scan & delete matches
+    beq $v0, $zero, chain_done # If $v0 == 0 (no match), break out of the loop
+    jal apply_gravity          
+    j match_chain_loop              
+
+chain_done:
+    bne $s0, $zero, exit_program   # Game over by bubble overflowing
 
     lw $t0, PLAYER_COLUMN
-    sll $t0, $t0, 2 
+    sll $t0, $t0, 2
     la $t1, BOARD
     addi $t1, $t1, 364
     add $t1, $t1, $t0
     lw $t3, 0($t1)
     bne $t3, $zero, exit_program
-    
     
 # Returning to game loop
 throw_done: 
@@ -530,9 +568,146 @@ throw_done:
 ##############################################################################
 # check_vertical_match (Milestone 3c)
 # see page 17 of the handout for details
+
+# Temporary Register map:
+  # t0: outer loop variable, representing the column index
+  # t1: inner loop variable, representing the row index
+  # t2: a pointer to the current cell in our 7x14 BOARD
+  # t3: the colour of $t2
+  # t4: the colour of the current vertical streak
+  # t5: # of bubbles in the current streak
+  # t6: memory addr. where the current streak
+  # 7-9: reserved for future modifications
 ##############################################################################
 check_vertical_match:
+    # jr $ra # testing purpose
+    addi $t0, $zero, 0
+    li $v0, 0
+
+match_column_loop: # OUter loop
+    sll $t7, $t0, 2
+    la $t2, BOARD
+    add $t2, $t2, $t7
+    addi $t1, $zero, 0
+    addi $t4, $zero, 0
+    addi $t5, $zero, 0
+    move $t6, $t2   # Syntax: move $destination, $source; it's basically a copy function
+
+match_row_loop: # Inner loop
+    lw $t3, 0($t2)
+    beq $t3, $zero, broken
+    bne $t3, $t4, broken
+
+    addi $t5, $t5, 1
+    j next_row
+
+broken:
+    addi $t7, $zero, 3
+    blt $t5, $t7, reset # Branch to reset if the streak has less than 3 bubbles of the same colour
+    li $v0, 1
+    
+    clear_run_loop:
+        sw $zero, 0($t6) # Reset the bubbles
+        addi $t6, $t6, 28
+        addi $t5, $t5, -1
+        bgtz $t5, clear_run_loop
+
+    # tracking a new streak
+    reset: 
+        move $t4, $t3
+        move $t6, $t2
+        li $t5, 0                 
+        beq $t3, $zero, next_row # If empty, keep 0 and jump to next_row
+        li $t5, 1
+
+next_row:
+    addi $t2, $t2, 28
+    addi $t1, $t1, 1
+    li $t7, 14
+    blt $t1, $t7, match_row_loop
+
+    li $t7, 3
+    blt $t5, $t7, next_column
+
+    li $v0, 1
+
+clear_end_loop:
+    sw $zero, 0($t6)
+    addi $t6, $t6, 28
+    addi $t5, $t5, -1
+    bgtz $t5, clear_end_loop
+    
+
+next_column:
+    addi $t0, $t0, 1
+    li $t7, 7
+    blt $t0, $t7, match_column_loop
     jr $ra
+
+##############################################################################
+# Gravity (Hard feature #3)
+# A portion of bubble logic that deals with upward gravity; put it as a separate
+# section due to complexity
+
+# After bubbles disappear as a result of matching 3+, any bubbles that are no
+# longer supported must float upward until there is no gap. 
+
+# Temporary Register map:
+  # t0: outer loop variable, representing the column index
+  # t1: inner loop variable, representing the row index
+  # t2: a pointer to the current cell in our BOARD
+  # t3: the bubble colour being popped
+  # t4: # of bubbles pushed onto the stack for this column
+  # t5: a placeholder for anything
+  # t6-9: reserved for future modifications
+##############################################################################
+apply_gravity:
+    addi $t0, $zero, 0
+
+gravity_column_loop: 
+    sll $t5, $t0, 2
+
+    # Making $t2 point to row 13 of column $t0
+    la $t2, BOARD
+    addi $t2, $t2, 364
+    add $t2, $t2, $t5
+    addi $t1, $zero, 13
+    addi $t4, $zero, 0
+
+gravity_push_loop:
+    lw $t3, 0($t2)
+    beq $t3, $zero, gravity_push_next
+
+    # push $t3 onto the stack
+    addi $sp, $sp, -4
+    sw $t3, 0($sp)
+    sw $zero, 0($t2)
+    addi $t4, $t4, 1
+
+
+gravity_push_next:
+    addi $t2, $t2, -28
+    addi $t1, $t1, -1
+    bge $t1, 0, gravity_push_loop
+
+    beq $t4, $zero, gravity_next_column # nothing was pushed, so we move onto the next column
+    addi $t2, $t2, 28
+
+gravity_pop_loop:
+    # popping: reverse of line #648-649
+    lw $t3, 0($sp)
+    addi $sp, $sp, 4
+
+    sw $t3, 0($t2)
+    addi $t2, $t2, 28
+    addi $t4, $t4, -1
+    bgt $t4, 0, gravity_pop_loop
+    
+gravity_next_column:
+    addi $t0, $t0, 1
+    blt $t0, 7, gravity_column_loop
+    jr $ra
+
 # exit after drawing the static scene
 exit_program:
     li $v0, 10
