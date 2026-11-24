@@ -51,6 +51,12 @@ BOARD:
     .space 392  # 14x7x4 bytes
 PLAYER_COLUMN:
     .word 3  # start in the centre column (columns are 0-6)
+HELD_COLOR:
+    .word 0  # 0 means no bubble is held
+HELD_COUNT:
+    .word 0
+KEY_COUNT:
+    .word 0  # row advances at 10
 
 ##############################################################################
 # Code
@@ -73,9 +79,11 @@ game_loop:
 	# 4. Sleep
 
     jal check_keyboard
+    jal check_row_advance
     jal draw_background
     jal draw_board
     jal draw_player
+    jal draw_held
 
     li $v0, 32
     li $a0, 16
@@ -134,10 +142,14 @@ key_pressed:
     lw $t2, 4($t0)
     beq $t2, 0x61, move_left
     beq $t2, 0x64, move_right
+    beq $t2, 0x73, grab_bubbles
     beq $t2, 0x71, exit_program
     jr $ra
 
 move_left:
+    lw $t6, KEY_COUNT
+    addi $t6, $t6, 1
+    sw $t6, KEY_COUNT
     lw $t3, PLAYER_COLUMN
     beq $t3, $zero, keyboard_done
     addi $t3, $t3, -1
@@ -145,6 +157,9 @@ move_left:
     j keyboard_done
 
 move_right:
+    lw $t6, KEY_COUNT
+    addi $t6, $t6, 1
+    sw $t6, KEY_COUNT
     lw $t3, PLAYER_COLUMN
     li $t4, 6
     beq $t3, $t4, keyboard_done
@@ -152,6 +167,150 @@ move_right:
     sw $t3, PLAYER_COLUMN
 
 keyboard_done:
+    jr $ra
+
+##############################################################################
+# grab_bubbles
+# grabs the bottom same-coloured chain in the current column
+##############################################################################
+grab_bubbles:
+    lw $t6, KEY_COUNT
+    addi $t6, $t6, 1
+    sw $t6, KEY_COUNT
+    lw $t0, PLAYER_COLUMN
+    sll $t0, $t0, 2
+    la $t1, BOARD
+    addi $t1, $t1, 364
+    add $t1, $t1, $t0
+    li $t2, 14
+
+find_bottom_bubble:
+    lw $t3, 0($t1)
+    bne $t3, $zero, bottom_bubble_found
+    addi $t1, $t1, -28
+    addi $t2, $t2, -1
+    bgtz $t2, find_bottom_bubble
+    jr $ra
+
+bottom_bubble_found:
+    lw $t4, HELD_COUNT
+    lw $t5, HELD_COLOR
+    bne $t4, $zero, check_held_color
+    sw $t3, HELD_COLOR
+    add $t5, $t3, $zero
+
+check_held_color:
+    bne $t3, $t5, grab_done
+
+remove_bubble_loop:
+    lw $t3, 0($t1)
+    bne $t3, $t5, grab_done
+    sw $zero, 0($t1)
+    lw $t4, HELD_COUNT
+    addi $t4, $t4, 1
+    sw $t4, HELD_COUNT
+    addi $t1, $t1, -28
+    addi $t2, $t2, -1
+    bgtz $t2, remove_bubble_loop
+
+grab_done:
+    jr $ra
+
+##############################################################################
+# check_row_advance
+# pushes the board down after 10 gameplay keys
+##############################################################################
+check_row_advance:
+    lw $t0, KEY_COUNT
+    slti $t1, $t0, 10
+    bne $t1, $zero, row_advance_done
+    sw $zero, KEY_COUNT
+
+    la $t0, BOARD
+    addi $t0, $t0, 360
+    addi $t1, $t0, 28
+    li $t2, 91
+
+shift_board_loop:
+    lw $t3, 0($t0)
+    sw $t3, 0($t1)
+    addi $t0, $t0, -4
+    addi $t1, $t1, -4
+    addi $t2, $t2, -1
+    bgtz $t2, shift_board_loop
+
+    la $t0, BOARD
+    addi $t0, $t0, 364
+    li $t1, 7
+
+check_bottom_row_loop:
+    lw $t2, 0($t0)
+    bne $t2, $zero, exit_program
+    addi $t0, $t0, 4
+    addi $t1, $t1, -1
+    bgtz $t1, check_bottom_row_loop
+
+    la $t0, BOARD
+    li $t1, 7
+
+new_row_loop:
+    li $v0, 42
+    li $a0, 0
+    li $a1, 4
+    syscall
+    addi $a0, $a0, 1
+    sw $a0, 0($t0)
+    addi $t0, $t0, 4
+    addi $t1, $t1, -1
+    bgtz $t1, new_row_loop
+
+row_advance_done:
+    jr $ra
+
+##############################################################################
+# draw_held
+# draws one small marker for each held bubble
+##############################################################################
+draw_held:
+    lw $t0, HELD_COUNT
+    beq $t0, $zero, draw_held_done
+    lw $t1, HELD_COLOR
+
+    beq $t1, 1, held_pink
+    beq $t1, 2, held_green
+    beq $t1, 3, held_blue
+    lw $t3, COLOR_YELLOW
+    j held_color_ready
+
+held_pink:
+    lw $t3, COLOR_PINK
+    j held_color_ready
+
+held_green:
+    lw $t3, COLOR_GREEN
+    j held_color_ready
+
+held_blue:
+    lw $t3, COLOR_BLUE
+
+held_color_ready:
+    lw $t2, ADDR_DSPL
+    addi $t2, $t2, 16064
+    li $t4, 0
+
+draw_held_loop:
+    sw $t3, 0($t2)
+    addi $t0, $t0, -1
+    beq $t0, $zero, draw_held_done
+    addi $t2, $t2, 4
+    addi $t4, $t4, 1
+    slti $t5, $t4, 14
+    bne $t5, $zero, draw_held_loop
+    addi $t2, $t2, -312
+    li $t4, 0
+    j draw_held_loop
+
+draw_held_done:
     jr $ra
 
 ##############################################################################
