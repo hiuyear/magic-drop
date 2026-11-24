@@ -62,10 +62,7 @@ PLAYER_COLUMN:
 main:
     # Initialize the game
     jal initialize_board
-    jal draw_background
-    jal draw_board
-    jal draw_player
-    j exit_program
+    j game_loop
 
 game_loop:
     # 1a. Check if key has been pressed
@@ -74,6 +71,15 @@ game_loop:
 	# 2b. Update locations (capsules)
 	# 3. Draw the screen
 	# 4. Sleep
+
+    jal check_keyboard
+    jal draw_background
+    jal draw_board
+    jal draw_player
+
+    li $v0, 32
+    li $a0, 16
+    syscall
 
     # 5. Go back to Step 1
     j game_loop
@@ -112,6 +118,40 @@ random_board_loop:
     addi $t1, $t1, -1
     bgtz $t1, random_board_loop
 
+    jr $ra
+
+##############################################################################
+# check_keyboard
+# handles a d and q
+##############################################################################
+check_keyboard:
+    lw $t0, ADDR_KBRD
+    lw $t1, 0($t0)
+    beq $t1, 1, key_pressed
+    jr $ra
+
+key_pressed:
+    lw $t2, 4($t0)
+    beq $t2, 0x61, move_left
+    beq $t2, 0x64, move_right
+    beq $t2, 0x71, exit_program
+    jr $ra
+
+move_left:
+    lw $t3, PLAYER_COLUMN
+    beq $t3, $zero, keyboard_done
+    addi $t3, $t3, -1
+    sw $t3, PLAYER_COLUMN
+    j keyboard_done
+
+move_right:
+    lw $t3, PLAYER_COLUMN
+    li $t4, 6
+    beq $t3, $t4, keyboard_done
+    addi $t3, $t3, 1
+    sw $t3, PLAYER_COLUMN
+
+keyboard_done:
     jr $ra
 
 ##############################################################################
