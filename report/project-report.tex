@@ -13,9 +13,8 @@
 \usepackage{graphicx}
 \usepackage{parskip}
 
-\title{Assembly Project: Dr Mario}
+\title{Assembly Project: Magical Drop}
 
-% TODO: Enter your name
 \author{Hiu Yan Kwok and Minseok Kwag}
 
 \begin{document}
@@ -26,29 +25,14 @@
 \begin{enumerate}
 
     \item Which milestones were implemented? \\
-    As of Nov. 24, the milestones 1, 2, and 3 were implemented.
+     The milestones 1, 2, and 3 were implemented by the first demo.
 
     \item How to view the game:
-    % TODO: specify the pixes/unit, width and height of 
-    %       your game, etc.  NOTE: list these details in
-    %       the header of your breakout.asm file too!
-    
-    Set the display width and height to 64. We have 14 rows and 7 columns in our version.
-    
-    \begin{enumerate}
-
-    \item
-    \item
-    \item
-
-
-    \end{enumerate}
-
-    
+    Set the display width and height to 64 pixels. We have 7 columns and 14 rows in our version of Magical Drop.
 
 \begin{figure}[ht!]
     \centering
-    % \includegraphics[width=0.3\textwidth]{name.png}
+    \includegraphics[width=0.75\textwidth]{asset/game.png}
     \caption{caption}
     \label{Instructions}
 \end{figure}
@@ -56,24 +40,12 @@
 \item Game Summary:
 % TODO: Tell us a little about your game.
 \begin{itemize}
-\item
-\item
+\item Our game is a variant of Magical Drop, an old arcade game from the late 20th century, adapted to the Assembly language.
+\item A row of colourful bubbles gets generated every 10 movements of the character. The purpose of the game is to shoot a bubble to the bottoms of columns and, when there are three or more bubbles of the same line up vertically, the bubbles disappear and the player earns score. 
 \end{itemize}
 
     
 \end{enumerate}
-
-Question 2. Store the board as 14 rows of 7 four-byte words, one row after another, for 392 bytes total. Zero means empty. Values 1 through 4 mean pink, green, blue, and yellow. Store the player column, held colour and count, and keystroke count separately.
-
-Question 3.
-
-\includegraphics[width=0.8\linewidth]{memory-layout.png}
-
-Question 4. Draw five rows of random coloured squares at the top of the board and a cream player square below the centre column.
-
-\includegraphics[width=0.6\linewidth]{milestone-1-scene.png}
-
-Question 5. A and D move the player left and right. S grabs the lowest bubble in the current column and any matching bubbles directly above it. Every ten counted inputs shift the board down and add a new top row. Q quits.
 
 \section{Attribution Table}
 % TODO: If you worked in partners, tell us who was
@@ -85,15 +57,15 @@ Question 5. A and D move the player left and right. S grabs the lowest bubble in
 \hline
 Student 1 (Hiu Yan Kwok 1010969855) & Student 2 (Minseok Kwag 1009608444) \\
 \hline
-Gameplay design & \\
+Gameplay design & Bug fixes\\
 \hline
 Milestone 1: Board and player initialization & Milestone 3\\
 \hline
 Milestone 2: Movement, grabbing, and row advancement & Hard Features 3 and 4\\
 \hline
-Task & Task\\
+- & -\\
 \hline
-Task & Task\\
+- & -\\
 \hline
 \end{tabular}
 \end{center}
@@ -105,5 +77,31 @@ Task & Task\\
 % features that were more challenging than they
 % might initially seem.
 
+\newpage
+\section{Report Questions}
+
+This section contains answers to the questions or tasks asked in the handout. 
+
+\subsection{Demo 1}
+Question 2. Store the board as 14 rows of 7 four-byte words, one row after another, for 392 bytes total. Zero means empty. Values 1 through 4 mean pink, green, blue, and yellow. Store the player column, held colour and count, and keystroke count separately.
+
+Question 3.
+
+\includegraphics[width=0.8\linewidth]{asset/memory-layout.png}
+
+Question 4. Draw five rows of random coloured squares at the top of the board and a cream player square below the centre column.
+
+\includegraphics[width=0.6\linewidth]{asset/milestone-1-scene.png}
+
+Question 5. A and D move the player left and right. S grabs the lowest bubble in the current column and any matching bubbles directly above it. Every ten counted inputs shift the board down and add a new top row. Q quits.
+
+Question 7. W throws all the bubbles that the player has collected. When a match of 3 or more bubbles is detected within a column, those bubbles will disappear. 
+
+\subsection{Demo 2}
+Coming soon!
+
+
+\section{Overflow \& Extra}
+Coming soon!
 
 \end{document}
