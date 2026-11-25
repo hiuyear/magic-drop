@@ -63,6 +63,18 @@
     
 \end{enumerate}
 
+Question 2. Store the board as 14 rows of 7 four-byte words, one row after another, for 392 bytes total. Zero means empty. Values 1 through 4 mean pink, green, blue, and yellow. Store the player column, held colour and count, and keystroke count separately.
+
+Question 3.
+
+\includegraphics[width=0.8\linewidth]{memory-layout.png}
+
+Question 4. Draw five rows of random coloured squares at the top of the board and a cream player square below the centre column.
+
+\includegraphics[width=0.6\linewidth]{milestone-1-scene.png}
+
+Question 5. A and D move the player left and right. S grabs the lowest bubble in the current column and any matching bubbles directly above it. Every ten counted inputs shift the board down and add a new top row. Q quits.
+
 \section{Attribution Table}
 % TODO: If you worked in partners, tell us who was
 % responsible for which features. Some reweighting
@@ -73,13 +85,11 @@
 \hline
 Student 1 (Hiu Yan Kwok 1010969855) & Student 2 (Minseok Kwag 1009608444) \\
 \hline
-Milestone 1 & Milestone 3\\
+Gameplay design & \\
 \hline
-Milestone 2 & Hard Features 3 and 4\\
+Milestone 1: Board and player initialization & Milestone 3\\
 \hline
-Task & Task\\
-\hline
-Task & Task\\
+Milestone 2: Movement, grabbing, and row advancement & Hard Features 3 and 4\\
 \hline
 Task & Task\\
 \hline
