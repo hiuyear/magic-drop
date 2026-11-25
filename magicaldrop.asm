@@ -496,7 +496,7 @@ throw_bubbles:
     addi $t6, $t6, 1
     sw $t6, KEY_COUNT
 
-    # (3) Computing the location that the bubble should go
+    # (3) Computing the location that the bubble(s) should go
     lw $t0, PLAYER_COLUMN
     sll $t0, $t0, 2
     
@@ -540,6 +540,11 @@ place_bubbles_loop:
 place_done:
     sw $zero, HELD_COUNT
     sw $zero, HELD_COLOR
+
+    jal draw_board  # Updates the board so that the thrown bubbles appear on the board
+    li $v0, 32
+    li $a0, 150    # Pause briefly so the eye catches them
+    syscall
 
 match_chain_loop:
     jal check_vertical_match # Scan & delete matches
