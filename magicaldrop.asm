@@ -161,12 +161,13 @@ check_keyboard:
 
 key_pressed:
     lw $t2, 4($t0)
-    sw $t9, NEEDS_REDRAW
-    beq $t2, 0x61, move_left
-    beq $t2, 0x64, move_right
-    beq $t2, 0x73, grab_bubbles
-    beq $t2, 0x77, throw_bubbles
-    beq $t2, 0x71, exit_program
+    li $t9, 1 # Added this line, so NEEDS_REDRAW could never have 0, preventing the trigger of screen refresh (Nov. 27)
+    sw $t9, NEEDS_REDRAW 
+    beq $t2, 0x61, move_left # a
+    beq $t2, 0x64, move_right # d
+    beq $t2, 0x73, grab_bubbles # s
+    beq $t2, 0x77, throw_bubbles # w
+    beq $t2, 0x71, exit_program #q
     jr $ra
 
 move_left:
@@ -506,9 +507,9 @@ throw_bubbles:
 
     li $t2, 13
 
-# I liked the fact that you labelled loop portions of your code explicitly as game_loop; I will follow suit
+# scans the column
 find_landing_loop:
-    lw $t3, 0($t1)
+    lw $t3, 0($t1) #t1 stores information about the bubbles in the column that the player is in
     bne $t3, $zero, landing_found
     addi $t1, $t1, -28
     addi $t2, $t2, -1
@@ -518,8 +519,8 @@ landing_found:
     addi $t1, $t1, 28
     addi $t2, $t2, 1
 
-    lw $t3, HELD_COLOR
-    lw $t4, HELD_COUNT
+    lw $t3, HELD_COLOR # t3 gets HELD_COLOR
+    lw $t4, HELD_COUNT # t4 gets HELD_COUNT
     li $s0, 0
 
 place_bubbles_loop:
@@ -538,18 +539,31 @@ place_bubbles_loop:
     j place_done
 
 place_done:
+    # After placing bubbles, you reset the variables for how many u were holding and the colour
     sw $zero, HELD_COUNT
     sw $zero, HELD_COLOR
 
     jal draw_board  # Updates the board so that the thrown bubbles appear on the board
     li $v0, 32
-    li $a0, 150    # Pause briefly so the eye catches them
+    li $a0, 250    # Pause briefly so the eye catches them
     syscall
 
 match_chain_loop:
     jal check_vertical_match # Scan & delete matches
     beq $v0, $zero, chain_done # If $v0 == 0 (no match), break out of the loop
-    jal apply_gravity          
+
+    jal draw_board
+    li $v0, 32
+    li $a0, 200 # Pausing for 0.15 sec
+    syscall
+    
+    jal apply_gravity     
+
+    jal draw_board
+    li $v0, 32
+    li $a0, 200
+    syscall
+    
     j match_chain_loop              
 
 chain_done:
@@ -585,9 +599,12 @@ throw_done:
   # 7-9: reserved for future modifications
 ##############################################################################
 check_vertical_match:
-    # jr $ra # testing purpose
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+  
     addi $t0, $zero, 0
-    li $v0, 0
+    li $v0, 0 
+    
 
 match_column_loop: # OUter loop
     sll $t7, $t0, 2
@@ -611,11 +628,28 @@ broken:
     blt $t5, $t7, reset # Branch to reset if the streak has less than 3 bubbles of the same colour
     li $v0, 1
     
-    clear_run_loop:
-        sw $zero, 0($t6) # Reset the bubbles
-        addi $t6, $t6, 28
-        addi $t5, $t5, -1
-        bgtz $t5, clear_run_loop
+    # clear_run_loop: (Nov 27th: this is replaced by flood_return)
+        # sw $zero, 0($t6) # Reset the bubbles
+        # addi $t6, $t6, 28
+        # addi $t5, $t5, -1
+        # bgtz $t5, clear_run_loop
+
+    addi $sp, $sp, -16
+    sw $t0, 0($sp) # col
+    sw $t1, 4($sp) # row
+    sw $t2, 8($sp) # cell 
+    sw $t3, 12($sp) # colour 
+
+    sub $a0, $t1, $t5 # gives the exact row the streatk started
+    move $a1, $t0
+    move $a2, $t4
+    jal flood_fill_main
+
+    lw $t0, 0($sp) # col
+    lw $t1, 4($sp) # rows
+    lw $t2, 8($sp) # cell 
+    lw $t3, 12($sp) # colour 
+    addi $sp, $sp, 16
 
     # tracking a new streak
     reset: 
@@ -636,17 +670,30 @@ next_row:
 
     li $v0, 1
 
-clear_end_loop:
-    sw $zero, 0($t6)
-    addi $t6, $t6, 28
-    addi $t5, $t5, -1
-    bgtz $t5, clear_end_loop
+# clear_end_loop:
+    # sw $zero, 0($t6)
+    # addi $t6, $t6, 28
+    # addi $t5, $t5, -1
+    # bgtz $t5, clear_end_loop
+
+    addi $sp, $sp, -4
+    sw $t0, 0($sp)
+    sub $a0, $t1, $t5
+    move $a1, $t0 
+    move $a2, $t4
+    jal flood_fill_main
+
+    lw $t0, 0($sp)
+    addi $sp, $sp, 4
     
 
 next_column:
     addi $t0, $t0, 1
     li $t7, 7
     blt $t0, $t7, match_column_loop
+
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4   
     jr $ra
 
 ##############################################################################
@@ -713,7 +760,96 @@ gravity_next_column:
     blt $t0, 7, gravity_column_loop
     jr $ra
 
-# exit after drawing the static scene
+
+##############################################################################
+# Flood-fill (Hard feature #2)
+
+# Once a match-3 occurs, searches all the vertically or horizontally connected
+# bubbles of the same colour and pops them.
+
+# Algorithm:
+  # flood_fill(row, column, colour):
+  # if: (base case 1) or (base case 2)
+    # flood_return (which )
+  # else: (recursion)
+
+# Register map:
+  # Warning: NEVER USE $v0. This tracks whether any match occurred in check_vertical_match
+  # , and I don't want the codes to be tangled in an un-debuggable way 
+
+  # Note: 
+  
+  # $a0: the pointer representing the current index of rows (0-13)
+  # $a1: same, but it's for columns (0-6)
+  # $a2: target colour 
+
+  # Any t registers are free to use. I was feeling like 8-9
+##############################################################################
+flood_fill_main:
+    # Base 1: bound check
+    blt $a0, 0, flood_return
+    bge $a0, 14, flood_return
+    blt $a1, 0, flood_return
+    bge $a1, 7, flood_return
+
+    # Base 2: Colour check (what's the addr of board[row][col]?)
+    li $t8, 28
+    mul $t8, $a0, $t8
+    sll $t9, $a1, 2 # multiplying $a1 by 4 bytes
+    add $t8, $t8, $t9
+    la $t9, BOARD
+    add $t8, $t8, $t9
+
+    lw $t9, 0($t8)
+    bne $t9, $a2, flood_return
+
+    sw $zero, 0($t8)
+
+    # Recursion prep: allcate 12 bytes on the stack ($sp)
+    addi $sp, $sp, -12
+    sw $ra, 0($sp)
+    sw $a0, 4($sp)
+    sw $a1, 8($sp)
+
+    # Up: (row - 1, col)
+    lw $a0, 4($sp)
+    addi $a0, $a0, -1
+    lw $a1, 8($sp)
+    jal flood_fill_main
+
+    # Down: (row + 1, col)
+    lw $a0, 4($sp)
+    addi $a0, $a0, 1
+    lw $a1, 8($sp)
+    jal flood_fill_main
+
+    # Left: (row, col - 1)
+    lw $a0, 4($sp)
+    lw $a1, 8($sp)
+    addi $a1, $a1, -1
+    jal flood_fill_main
+
+    # Right: (row, col + 1)
+    lw $a0, 4($sp)
+    lw $a1, 8($sp)
+    addi $a1, $a1, 1
+    jal flood_fill_main
+
+    # restore $ra and pop the 12-byte frame
+    lw $ra, 0($sp)
+    addi $sp, $sp, 12
+    
+    
+    
+
+
+flood_return: 
+    jr $ra
+  
+
+##############################################################################
+# Exit after drawing the static scene
+##############################################################################
 exit_program:
     li $v0, 10
     syscall
